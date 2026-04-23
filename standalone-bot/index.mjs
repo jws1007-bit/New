@@ -63,7 +63,7 @@ async function callGemini(prompt, retries = 3) {
       return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "요약 생성 실패";
     }
     const errText = await res.text();
-    if (res.status === 429 && attempt < retries) {
+    if ((res.status === 429 || res.status === 503) && attempt < retries) {
       const wait = 30 * attempt;
       console.log(`한도 초과, ${wait}초 대기 후 재시도 (${attempt}/${retries})`);
       await new Promise(r => setTimeout(r, wait * 1000));
