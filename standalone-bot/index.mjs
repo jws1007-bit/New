@@ -3,7 +3,7 @@ import Parser from "rss-parser";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
 
 if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID || !GEMINI_API_KEY) {
   console.error("필수 환경변수 누락: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, GEMINI_API_KEY");
@@ -68,7 +68,7 @@ async function collectNews() {
 
   articles.sort((a, b) => b.pubTime - a.pubTime);
   console.log(`총 ${articles.length}개 기사 수집 완료`);
-  return articles.slice(0, 30);
+  return articles.slice(0, 20);
 }
 
 async function generateDigest(articles) {
