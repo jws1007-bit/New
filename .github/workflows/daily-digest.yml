@@ -1,0 +1,24 @@
+name: Daily AI News Digest
+on:
+  schedule:
+    - cron: "0 23 * * *"
+  workflow_dispatch:
+jobs:
+  send-digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies
+        working-directory: standalone-bot
+        run: npm install --no-package-lock
+      - name: Run digest bot
+        working-directory: standalone-bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: npm start
