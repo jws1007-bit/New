@@ -9,7 +9,7 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 # 2. Gemini API 설정 및 프롬프트 작성
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-1.5-pro-latest')
 
 prompt = """
 오늘의 글로벌 AI(인공지능) 최신 뉴스 트렌드를 검색해서 핵심만 3~4가지 다이제스트로 요약해줘. 
