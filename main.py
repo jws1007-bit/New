@@ -1,50 +1,61 @@
 import os
 import requests
+from datetime import datetime, timezone, timedelta
 from google import genai
+from google.genai import types
 
 # 1. 환경 변수 설정
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-# 2. 클라이언트 초기화
+if not GEMINI_API_KEY:
+    print("🚨 API 키 누락")
+    exit(1)
+
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-# 3. 더 강력해진 프롬프트
-prompt = """
-전 세계 주요 IT 및 AI 뉴스 사이트(The Verge, TechCrunch, Wired, MIT Technology Review 등)를 참고하여 
-지난 24시간 동안 가장 중요한 글로벌 AI 관련 뉴스 8~10개를 선정해줘.
+# 2. '오늘 날짜' 정확히 계산 (한국 시간 기준)
+kst = timezone(timedelta(hours=9))
+today_str = datetime.now(kst).strftime("%Y년 %m월 %d일")
+
+# 3. 구글 검색을 강제하는 프롬프트
+prompt = f"""
+당신은 전 세계 AI 동향을 분석하는 최고 수준의 기술 리서처입니다.
+🚨 매우 중요: 오늘 날짜는 **{today_str}** 입니다. 반드시 구글 검색을 활용하여 과거 뉴스가 아닌 **{today_str} 기준 지난 24시간 이내의 가장 최신 글로벌 AI 뉴스** 8~10개를 선정해주세요.
 
 각 뉴스마다 다음 형식을 지켜서 작성해줘:
 1. 제목 앞에 적절한 이모지 사용
 2. 핵심 내용을 2~3문장으로 간결하게 요약
-3. 해당 뉴스의 출처(신뢰할 수 있는 뉴스 사이트의 URL 주소)를 반드시 포함
+3. 해당 뉴스의 출처([원문 보기](실제 URL 주소))를 반드시 포함
 
 전체적인 분위기는 스마트하고 읽기 편한 다이제스트 형식으로 작성해줘.
 """
 
-# 4. 뉴스 생성
-print("풍성한 뉴스 다이제스트를 생성 중입니다...")
+# 4. '구글 검색 도구'를 켜고 뉴스 생성
+print(f"🔍 {today_str} 기준 최신 AI 뉴스를 검색 중입니다...")
 response = client.models.generate_content(
     model='gemini-2.5-flash',
     contents=prompt,
+    config=types.GenerateContentConfig(
+        tools=[{"google_search": {}}], # 구글 실시간 검색 활성화!
+    )
 )
-news_digest = f"🚀 **[오늘의 AI 뉴스 상세 브리핑]**\n\n{response.text}"
+news_digest = f"🚀 **[{today_str} 글로벌 AI 뉴스 상세 브리핑]**\n\n{response.text}"
 
-# 5. 텔레그램 발송
+# 5. 텔레그램 발송 (안전장치 포함)
 def send_telegram_message(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": text,
         "parse_mode": "Markdown",
-        "disable_web_page_preview": False  # 링크 미리보기 활성화
+        "disable_web_page_preview": False
     }
-    telegram_response = requests.post(url, data=payload)
-    if telegram_response.status_code == 200:
-        print("상세 뉴스 발송 성공!")
-    else:
-        # 메시지가 너무 길 경우를 대비한 간단한 예외 처리
-        print(f"발송 실패: {telegram_response.text}")
+    res = requests.post(url, data=payload)
+    if res.status_code != 200:
+        payload.pop("parse_mode")
+        requests.post(url, data=payload)
 
 send_telegram_message(news_digest)
+
