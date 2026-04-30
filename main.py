@@ -1,61 +1,81 @@
 import os
 import requests
+import yfinance as yf
 from datetime import datetime, timezone, timedelta
 from google import genai
 from google.genai import types
 
-# 1. 환경 변수 설정
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-if not GEMINI_API_KEY:
-    print("🚨 API 키 누락")
-    exit(1)
-
-client = genai.Client(api_key=GEMINI_API_KEY)
-
-# 2. '오늘 날짜' 정확히 계산 (한국 시간 기준)
 kst = timezone(timedelta(hours=9))
 today_str = datetime.now(kst).strftime("%Y년 %m월 %d일")
 
-# 3. 구글 검색을 강제하는 프롬프트
+# 1. 금융/원자재 데이터
+tickers = {
+    "🇰🇷 KOSPI": "^KS11", "🇺🇸 나스닥": "^IXIC", "🇨🇳 상해종합": "000001.SS", "🇯🇵 닛케이": "^N225",
+    "💵 USD/KRW": "KRW=X", "💴 USD/JPY": "JPY=X", "🇮🇳 USD/INR": "INR=X", "💶 USD/EUR": "EUR=X", "📊 달러지수": "DX-Y.NYB",
+    "💰 금": "GC=F", "🥈 은": "SI=F", "🏗️ 구리": "HG=F", "⛓️ 알루미늄": "ALI=F", "🛢️ WTI유": "CL=F", "⛽ 브렌트유": "BZ=F"
+}
+
+finance_text = f"📊 <b>[{today_str} 금융/원자재 시황]</b>\n\n"
+for name, ticker in tickers.items():
+    try:
+        data = yf.Ticker(ticker).history(period="2d")
+        if len(data) >= 2:
+            current, prev = data['Close'].iloc[-1], data['Close'].iloc[-2]
+            pct = ((current - prev) / prev) * 100
+            sign = "🔺" if pct > 0 else "🔻" if pct < 0 else "➖"
+            finance_text += f"{name}: {current:,.2f} ({sign}{pct:+.2f}%)\n"
+    except: 
+        finance_text += f"{name}: 조회불가\n"
+
+# 2. 뉴스 요약 (원문 링크 강제 프롬프트 적용)
+client = genai.Client(api_key=GEMINI_API_KEY)
 prompt = f"""
-당신은 전 세계 AI 동향을 분석하는 최고 수준의 기술 리서처입니다.
-🚨 매우 중요: 오늘 날짜는 **{today_str}** 입니다. 반드시 구글 검색을 활용하여 과거 뉴스가 아닌 **{today_str} 기준 지난 24시간 이내의 가장 최신 글로벌 AI 뉴스** 8~10개를 선정해주세요.
+당신은 텔레그램 뉴스 브리핑 봇입니다. 
+🚨 오늘 날짜는 {today_str}입니다. 구글 검색을 통해 실시간 한국 뉴스를 취합하세요. (경제 50%, 정치/사회 40%, 삼성 라이온즈 5%, 연예 5%)
 
-각 뉴스마다 다음 형식을 지켜서 작성해줘:
-1. 제목 앞에 적절한 이모지 사용
-2. 핵심 내용을 2~3문장으로 간결하게 요약
-3. 해당 뉴스의 출처([원문 보기](실제 URL 주소))를 반드시 포함
+[🚨매우 엄격한 출력 규칙]
+1. 마크다운 기호(별표 **, 대괄호 [] 등)는 텔레그램 에러를 유발하므로 절대 금지합니다.
+2. 각 기사마다 구글 검색을 통해 **실제 뉴스 기사의 인터넷 주소(URL)를 반드시 찾아내세요.** URL이 빠지면 절대 안 됩니다.
+3. 기사 작성 시 아래의 HTML 태그 형식을 한 글자도 빠짐없이 지켜주세요:
 
-전체적인 분위기는 스마트하고 읽기 편한 다이제스트 형식으로 작성해줘.
+<b>기사 제목</b>
+- 요약 내용 (1~2줄)
+- <a href="여기에_실제_검색한_기사_URL_입력">🔗 원문보기</a>
+<br>
+
+4. 한국 10년물 및 미국 10년물 국채 금리는 뉴스 섹션 맨 위에 일반 텍스트로 적어주세요.
 """
 
-# 4. '구글 검색 도구'를 켜고 뉴스 생성
-print(f"🔍 {today_str} 기준 최신 AI 뉴스를 검색 중입니다...")
+print("뉴스 분석 및 텔레그램 최적화 중...")
 response = client.models.generate_content(
-    model='gemini-2.5-flash',
+    model='gemini-2.0-flash',
     contents=prompt,
-    config=types.GenerateContentConfig(
-        tools=[{"google_search": {}}], # 구글 실시간 검색 활성화!
-    )
+    config=types.GenerateContentConfig(tools=[{"google_search": {}}])
 )
-news_digest = f"🚀 **[{today_str} 글로벌 AI 뉴스 상세 브리핑]**\n\n{response.text}"
 
-# 5. 텔레그램 발송 (안전장치 포함)
-def send_telegram_message(text):
+# 3. 통합 및 텔레그램 발송
+final_text = finance_text + "\n📰 <b>[주요 뉴스 브리핑]</b>\n\n" + response.text
+
+def send_telegram(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": text,
-        "parse_mode": "Markdown",
-        "disable_web_page_preview": False
+        "chat_id": TELEGRAM_CHAT_ID, 
+        "text": text, 
+        "parse_mode": "HTML", 
+        "disable_web_page_preview": True
     }
     res = requests.post(url, data=payload)
+    
     if res.status_code != 200:
+        print(f"⚠️ HTML 렌더링 에러 발생. 일반 텍스트로 안전하게 우회 발송합니다. 사유: {res.text}")
         payload.pop("parse_mode")
         requests.post(url, data=payload)
+    else:
+        print("✅ 텔레그램 발송 성공!")
 
-send_telegram_message(news_digest)
+send_telegram(final_text)
 
