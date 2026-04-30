@@ -2,9 +2,8 @@ name: Daily AI News to Telegram
 
 on:
   schedule:
-    # 한국 시간 매일 아침 6시 (UTC 21:00)
-    - cron: '0 21 * * *'
-  workflow_dispatch: # 수동 실행 버튼 활성화
+    - cron: '0 2 * * *' 
+  workflow_dispatch:
 
 jobs:
   build:
