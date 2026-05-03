@@ -52,7 +52,7 @@ prompt = f"""
 
 print("뉴스 분석 및 텔레그램 최적화 중...")
 response = client.models.generate_content(
-    model='gemini-2.0-flash',
+    model='gemini-1.5-flash-latest',
     contents=prompt,
     config=types.GenerateContentConfig(tools=[{"google_search": {}}])
 )
